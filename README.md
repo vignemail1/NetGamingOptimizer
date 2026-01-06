@@ -1,206 +1,204 @@
 # NetGamingOptimizer
 
-Script PowerShell pour optimiser une carte réseau sous Windows 11 pour le gaming, avec :
+PowerShell script to optimize a Windows 10/11 network adapter for competitive gaming with:
 
-- Profils d’optimisation (de **Defaults** à **Ultra**)
-- Sauvegardes JSON versionnées de l’état réseau
-- Restauration d’un état précédent
-- Diff entre deux sauvegardes
-- Mode **dry-run** (aperçu des changements sans les appliquer)
-- Affichage des cartes réseau avec leurs IP pour choisir facilement le bon `AdapterName`
+- Network optimization **profiles** from **Defaults** to **Ultra**
+- Versioned JSON **backups** of adapter advanced settings and key registry tweaks
+- **Restore** to any previous state
+- **Diff** between two backups (NIC advanced properties + registry)
+- **Dry-run** mode (preview changes without applying)
+- **Adapter listing** with IPv4/IPv6 to easily find the correct `AdapterName`
 
-Les sauvegardes sont stockées par défaut dans :
+Backups are stored by default in:
 
 - `C:\ProgramData\NetGamingProfiles`
 
-Les fichiers de backup sont nommés avec la date/heure en premier pour faciliter le tri chronologique, par exemple :
+Backup files are named with the timestamp first so lexicographical order matches chronological order, e.g.:
 
-- `20260106-141230_backup_Ethernet_Agressif.json`
-
----
-
-## Prérequis
-
-- Windows 10/11 avec PowerShell 5.1+ ou PowerShell Core
-- Exécution en **administrateur** (modification des propriétés NIC + registre)
-- Cmdlets réseau disponibles (`Get-NetAdapter`, `Get-NetIPConfiguration`, `Get-NetAdapterAdvancedProperty`, etc.)
+- `20260106-141230_backup_Ethernet_Aggressive.json`
 
 ---
 
-## Installation
+## Requirements
 
-```powershell
-git clone https://github.com/vignemail1/NetGamingOptimizer.git
-cd NetGamingOptimizer
-# éventuellement :
-Unblock-File .\NetGamingOptimizer.ps1
-```
-
-Exécuter PowerShell en tant qu’administrateur, puis lancer le script.
+- Windows 10/11 with PowerShell 5.1 or PowerShell 7+
+- Run the script **as Administrator**
+- Network cmdlets available:
+  - `Get-NetAdapter`, `Get-NetIPConfiguration`
+  - `Get-NetAdapterAdvancedProperty`, `Set-NetAdapterAdvancedProperty`
 
 ---
 
-## Profils disponibles
+## Profiles
+
+Selected via `-Profile` (optional, default: `Defaults`):
 
 - `Defaults`  
-  Proche des valeurs par défaut Windows 11 :
-  - Interrupt Moderation : Enabled  
-  - Buffers RX/TX : 512  
-  - `NetworkThrottlingIndex` : 10  
-  - TCP/Nagle : `TcpAckFrequency=2`, `TCPNoDelay` + `TcpDelAckTicks` supprimés (Nagle actif)
+  Close to Windows defaults for most NICs:
+  - Interrupt Moderation: Enabled  
+  - RX/TX Buffers: 512  
+  - `NetworkThrottlingIndex`: 10  
+  - TCP/Nagle:
+    - `TcpAckFrequency = 2`
+    - `TCPNoDelay` and `TcpDelAckTicks` removed (Nagle enabled)
 
 - `Conservateur`  
-  Compromis stabilité/latence :
-  - Interrupt Moderation : Enabled  
-  - Buffers RX/TX : 256  
-  - `NetworkThrottlingIndex` : 10  
-  - TCP/Nagle : `TcpAckFrequency=2`, `TCPNoDelay=0`
+  Safer low-latency compromise:
+  - Interrupt Moderation: Enabled  
+  - RX/TX Buffers: 256  
+  - `NetworkThrottlingIndex`: 10  
+  - TCP/Nagle:
+    - `TcpAckFrequency = 2`
+    - `TCPNoDelay = 0`
 
 - `Agressif`  
-  Latence réduite au détriment de l’occupation CPU :
-  - Interrupt Moderation : Disabled  
-  - Buffers RX/TX : 128  
-  - `NetworkThrottlingIndex` : `0xffffffff` (désactivé)  
-  - TCP/Nagle : `TcpAckFrequency=1`, `TCPNoDelay=1`
+  Lower latency, more CPU interrupts:
+  - Interrupt Moderation: Disabled  
+  - RX/TX Buffers: 128  
+  - `NetworkThrottlingIndex`: `0xffffffff` (disabled)  
+  - TCP/Nagle:
+    - `TcpAckFrequency = 1`
+    - `TCPNoDelay = 1`
 
 - `Ultra`  
-  Profil très agressif (à tester) :
-  - Interrupt Moderation : Disabled  
-  - Buffers RX/TX : 64  
-  - `NetworkThrottlingIndex` : `0xffffffff`  
-  - TCP/Nagle : `TcpAckFrequency=1`, `TCPNoDelay=1`, `TcpDelAckTicks=0`
+  Very aggressive (test and validate on your system):
+  - Interrupt Moderation: Disabled  
+  - RX/TX Buffers: 64  
+  - `NetworkThrottlingIndex`: `0xffffffff`  
+  - TCP/Nagle:
+    - `TcpAckFrequency = 1`
+    - `TCPNoDelay = 1`
+    - `TcpDelAckTicks = 0`
 
-- `Restore`  
-  Restaure un backup existant (`-RestoreVersion` requis).
-
-- `ListBackups`  
-  Liste les backups existants (nom + profil + adaptateur + date).
-
-- `Diff`  
-  Compare deux backups (ou les deux plus récents si `-Backup1`/`-Backup2` non fournis).
-
-- `ShowAdapters`  
-  Affiche les cartes réseau actives, leurs IPs et descriptions (pour trouver facilement le `-AdapterName`).
+If no action switch is passed (`-ShowAdapters`, `-ListBackups`, `-Restore`, `-Diff`), the script assumes you want to **apply** the selected profile on the chosen adapter.
 
 ---
 
-## Paramètres
+## Actions (switches)
 
-- `-Profile` (obligatoire)  
-  `Defaults | Conservateur | Agressif | Ultra | Restore | ListBackups | Diff | ShowAdapters`
+- `-ShowAdapters`  
+  Show active network adapters with:
+  - Name (alias)
+  - Description
+  - IPv4 / IPv6 addresses
 
-- `-AdapterName` (optionnel, défaut : `"Ethernet"`)  
-  Nom ou motif de l’alias d’interface (par ex. `"Ethernet"`, `"LAN"`).  
-  Utilisé pour les profils (Defaults/Conservateur/Agressif/Ultra) et pour les backups liés à un adaptateur.
+- `-ListBackups`  
+  List existing backups in `-BackupDir` (file name, adapter, profile, timestamp).
 
-- `-BackupDir` (optionnel)  
-  Répertoire où sont stockés les backups JSON.  
-  Défaut : `C:\ProgramData\NetGamingProfiles`.
+- `-Restore`  
+  Restore settings from a backup file (requires `-RestoreVersion`).  
+  Can be combined with `-DryRun` for a preview.
 
-- `-BackupName` (optionnel)  
-  Nom personnalisé du fichier de backup (sans chemin, `.json` ajouté si absent).  
-  Le script préfixe toujours ce nom par le timestamp, par ex. :  
-  `20260106-141500_avant_test_ultra.json`.
+- `-Diff`  
+  Compare two backups (or the two latest if `-Backup1`/`-Backup2` are omitted).
 
-- `-RestoreVersion` (requis pour `Profile=Restore`)  
-  Nom du fichier JSON à restaurer (sans chemin, dans `-BackupDir`).
-
-- `-Backup1`, `-Backup2` (optionnels pour `Profile=Diff`)  
-  Noms de fichiers JSON à comparer.  
-  Si absents, les deux backups les plus récents (selon le système de fichiers) sont utilisés.
-
-- `-DryRun` (optionnel)  
-  Mode aperçu :
-  - Avec `Profile=Restore` : backup de l’état courant puis diff entre l’état courant et le backup cible, sans restaurer.
-  - Avec `Profile=Defaults/Conservateur/Agressif/Ultra` : affiche ce que le profil va faire, sans écrire.
+- `-DryRun`  
+  Preview changes without modifying the system:
+  - With profile application: show what would be applied.
+  - With `-Restore`: show differences between current state and target backup.
 
 ---
 
-## Exemples d’usage
+## Parameters
 
-### Lister les cartes réseau et leurs IP
+- `-Profile`  
+  One of: `Defaults | Conservateur | Agressif | Ultra`  
+  Default: `Defaults`.
+
+- `-AdapterName`  
+  NIC alias or pattern; default: `"Ethernet"`.  
+  Used when applying a profile and when backing up current state.
+
+- `-BackupDir`  
+  Directory to store JSON backups.  
+  Default: `C:\ProgramData\NetGamingProfiles`.
+
+- `-BackupName`  
+  Custom backup file base name (no path).  
+  The script always prefixes the name with the timestamp, e.g.:  
+  `20260106-141500_my_custom_backup.json`.
+
+- `-RestoreVersion`  
+  Backup file name (without path) to restore, required with `-Restore`.
+
+- `-Backup1`, `-Backup2`  
+  Backup file names to compare for `-Diff`.  
+  If omitted, the two lexicographically newest `.json` files are used.
+
+- `-DryRun`  
+  Do not write any system changes; only show what would change.
+
+---
+
+## Usage examples
+
+### List network adapters and IPs
 
 ```powershell
-.\NetGamingOptimizer.ps1 -Profile ShowAdapters
+.\NetGamingOptimizer.ps1 -ShowAdapters
 ```
 
-### Appliquer un profil agressif (avec backup auto)
+### Apply an aggressive profile to “Ethernet” (with automatic backup)
 
 ```powershell
 .\NetGamingOptimizer.ps1 -Profile Agressif -AdapterName "Ethernet"
 ```
 
-### Appliquer le profil Defaults pour revenir proche des valeurs stock
+### Apply Defaults profile (soft reset)
 
 ```powershell
 .\NetGamingOptimizer.ps1 -Profile Defaults -AdapterName "Ethernet"
 ```
 
-### Appliquer un profil avec un nom de backup personnalisé
+### Apply Ultra profile with a custom backup name
 
 ```powershell
-.\NetGamingOptimizer.ps1 -Profile Ultra -AdapterName "Ethernet" -BackupName "avant_test_ultra"
+.\NetGamingOptimizer.ps1 -Profile Ultra -AdapterName "Ethernet" -BackupName "before_ultra_test"
 ```
 
-### Lister les backups
+### List existing backups
 
 ```powershell
-.\NetGamingOptimizer.ps1 -Profile ListBackups
+.\NetGamingOptimizer.ps1 -ListBackups
 ```
 
-### Comparer les deux derniers backups
+### Compare the two latest backups
 
 ```powershell
-.\NetGamingOptimizer.ps1 -Profile Diff
+.\NetGamingOptimizer.ps1 -Diff
 ```
 
-### Comparer deux backups précis
+### Compare two specific backups
 
 ```powershell
-.\NetGamingOptimizer.ps1 -Profile Diff -Backup1 "20260106-140000_backup_Ethernet_Agressif.json" -Backup2 "20260106-141000_backup_Ethernet_Ultra.json"
+.\NetGamingOptimizer.ps1 -Diff -Backup1 "20260106-140000_backup_Ethernet_Agressif.json" -Backup2 "20260106-141000_backup_Ethernet_Ultra.json"
 ```
 
-### Dry-run d’un profil (aperçu sans appliquer)
+### Dry-run a profile (no changes applied)
 
 ```powershell
 .\NetGamingOptimizer.ps1 -Profile Agressif -AdapterName "Ethernet" -DryRun
 ```
 
-### Dry-run d’une restauration
+### Restore from a backup
 
 ```powershell
-.\NetGamingOptimizer.ps1 -Profile Restore -RestoreVersion "20260106-140000_backup_Ethernet_Agressif.json" -DryRun
+.\NetGamingOptimizer.ps1 -Restore -RestoreVersion "20260106-140000_backup_Ethernet_Agressif.json"
+```
+
+### Dry-run a restore
+
+```powershell
+.\NetGamingOptimizer.ps1 -Restore -RestoreVersion "20260106-140000_backup_Ethernet_Agressif.json" -DryRun
 ```
 
 ---
 
-## Emplacement des sauvegardes
+## Backup location
 
-Par défaut :
+Default backup directory:
 
 - `C:\ProgramData\NetGamingProfiles`
 
-Ce dossier peut être modifié via `-BackupDir`.  
-Les fichiers sont de simples JSON, facilement versionnables (Git, sauvegardes, etc.).
-
----
-
-## Avertissements
-
-- Toujours tester en dry-run (`-DryRun`) avant de pousser un profil agressif sur une machine sensible.
-- Certains noms de propriétés NIC (`DisplayName`) varient selon le pilote (Intel, Realtek, etc.).  
-  Ajuster si besoin avec :
-
-```powershell
-Get-NetAdapterAdvancedProperty -Name "Ethernet" -AllProperties
-```
-
----
-
-## Contribution
-
-- Issues / PR bienvenues pour :
-  - Support de cartes particulières (Intel/Realtek/2.5G/10G)
-  - Profils supplémentaires
-  - UI (WinUI/WPF) ou wrapper CLI plus friendly
-```
+You can override with `-BackupDir`.  
+Backup files are plain JSON and can be versioned with Git or backed up as needed.
