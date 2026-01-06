@@ -1,4 +1,4 @@
-# Network Gaming Opti
+# NetGamingOptimizer
 
 Script PowerShell pour optimiser une carte réseau sous Windows 11 pour le gaming, avec :
 
