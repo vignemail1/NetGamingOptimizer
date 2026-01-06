@@ -30,8 +30,8 @@ Les fichiers de backup sont nommés avec la date/heure en premier pour faciliter
 ## Installation
 
 ```powershell
-git clone https://github.com/vignemail1/network-gaming-opti.git
-cd network-gaming-opti
+git clone https://github.com/vignemail1/NetGamingOptimizer.git
+cd NetGamingOptimizer
 # éventuellement :
 Unblock-File .\NetGamingOptimizer.ps1
 ```
